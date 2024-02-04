@@ -9,7 +9,7 @@ from io import BytesIO
 from uuid import uuid4, UUID
 
 BUFFER_SIZE = 10
-HEADER = b'\x01\x02\x03\x04'
+HEADER = b'\x04\x02\x01\x03'
 id = uuid4()
 
 data = {"message":"Ok", "items" : [1.2,3,4.5], "data" : [1.2,3,4.5], "messages" : [1.2,3,4.5]}
@@ -33,7 +33,7 @@ for i, packet in enumerate(chunks):
     encoded_chunks.append(packet_with_header)
 
 # decoding
-decoded_bytes = []
+decode_directory = {}
 for msg in encoded_chunks:
     # get header
     _header = msg[:28]
@@ -47,14 +47,22 @@ for msg in encoded_chunks:
     
     if _header_id == HEADER:
         decoded = rs.decode(_data)[0]
-        decoded_bytes.append(decoded)
+        if uid not in decode_directory:
+            decode_directory[uid] = []
+        decode_directory[uid].append((index, decoded))
         
-byte_iterable = itertools.chain.from_iterable(decoded_bytes)
-byte_object = bytes(byte_iterable)
-# decompressing
-buffer = BytesIO(byte_object)
-with gzip.GzipFile(fileobj=buffer) as f:
-    decompressed_content = f.read()
-    # message = {key.decode("utf-8"): value for key, value in msgpack.unpackb(decompressed_content).items()} 
-    message = msgpack.unpackb(decompressed_content)
-print(message)
+        if(len(decode_directory[uid]) == size):
+            _chunks = decode_directory[uid]
+            _chunks.sort(key=lambda x: x[0])
+            _data_array = [x[1] for x in _chunks]
+            byte_iterable = itertools.chain.from_iterable(_data_array)
+            byte_object = bytes(byte_iterable)
+            # decompressing
+            buffer = BytesIO(byte_object)
+            with gzip.GzipFile(fileobj=buffer) as f:
+                decompressed_content = f.read()
+                message = msgpack.unpackb(decompressed_content)
+            del decode_directory[uid]
+            print(message)
+        
+
